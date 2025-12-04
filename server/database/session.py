@@ -9,7 +9,11 @@ load_dotenv()
 db_url = os.getenv("URL")
 
 engine = create_engine(db_url)
-SessionLocal = sessionmaker(bind=engine)
+SessionLocal = sessionmaker(
+    autocommit=False,
+    autoflush=False,
+    bind=engine
+)
 Base = declarative_base()
 
 def get_db() -> Session:
