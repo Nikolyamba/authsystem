@@ -8,6 +8,6 @@ class User(Base):
     name = Column(String(20), nullable=False)
     surname = Column(String(20), nullable=False)
     patronymic = Column(String(20), nullable=True)
-    email = Column(String(30), nullable=False, unique=True)
+    email = Column(String(50), nullable=False, unique=True)
     password = Column(String(128), nullable=False)
     is_active = Column(Boolean, default=True)

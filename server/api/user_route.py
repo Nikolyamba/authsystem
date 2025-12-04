@@ -1,9 +1,10 @@
 from typing import Optional, Annotated
 
 from fastapi import APIRouter, Depends, HTTPException
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, EmailStr
 from sqlalchemy.orm import Session
 
+from server.api.jwt_auth import create_access_token, create_refresh_token
 from server.database.models.user_model import User
 from server.database.session import get_db
 from server.features import hashed_password
@@ -14,14 +15,14 @@ class UserInfo(BaseModel):
     name: str
     surname: str
     patronymic: Optional[str] = None #если не передано то None
-    email: str
+    email: EmailStr
 
 class UserRegister(UserInfo):
     password: Annotated[str, Field(min_length=8, max_length=128)]
     repeat_password: Annotated[str, Field(min_length=8, max_length=128)]
 
-@u_router.post('/users', response_model=UserInfo)
-async def create_user(data: UserRegister, db: Session = Depends(get_db)):
+@u_router.post('/users')
+async def create_user(data: UserRegister, db: Session = Depends(get_db)) -> dict:
     if db.query(User).filter(User.email == data.email).first():
         raise HTTPException(status_code=400, detail='Такой email уже используется!')
     if data.password != data.repeat_password:
@@ -34,6 +35,6 @@ async def create_user(data: UserRegister, db: Session = Depends(get_db)):
     db.add(new_user)
     db.commit()
     db.refresh(new_user)
-    return new_user
-
-
+    access_token = create_access_token(data={"sub": new_user.id})
+    refresh_token = create_refresh_token(data={"sub": new_user.id})
+    return {"success": True, "payload": {"access_token": access_token, "refresh_token": refresh_token}}
