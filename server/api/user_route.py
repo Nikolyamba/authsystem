@@ -1,5 +1,6 @@
 from typing import Optional, Annotated
 
+import bcrypt
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, Field, EmailStr
 from sqlalchemy.orm import Session
@@ -35,6 +36,21 @@ async def create_user(data: UserRegister, db: Session = Depends(get_db)) -> dict
     db.add(new_user)
     db.commit()
     db.refresh(new_user)
-    access_token = create_access_token(data={"sub": new_user.id})
-    refresh_token = create_refresh_token(data={"sub": new_user.id})
+    access_token = create_access_token(user_id=new_user.id)
+    refresh_token = create_refresh_token(user_id=new_user.id)
+    return {"success": True, "payload": {"access_token": access_token, "refresh_token": refresh_token}}
+
+class UserLogin(BaseModel):
+    email: EmailStr
+    password: Annotated[str, Field(min_length=8, max_length=128)]
+
+@u_router.post('/login')
+async def login(data: UserLogin, db: Session = Depends(get_db)) -> dict:
+    user = db.query(User).filter(User.email == data.email).first()
+    if not user or not bcrypt.checkpw(data.password.encode('utf-8'), user.password.encode('utf-8')):
+        raise HTTPException(status_code=400, detail="email или пароль введены неправильно")
+    if not user.is_active:
+        raise HTTPException(status_code=400, detail="пользователь удалён")
+    access_token = create_access_token(user.id)
+    refresh_token = create_refresh_token(user.id)
     return {"success": True, "payload": {"access_token": access_token, "refresh_token": refresh_token}}
