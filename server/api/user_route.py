@@ -5,10 +5,11 @@ from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, Field, EmailStr
 from sqlalchemy.orm import Session
 
-from server.api.jwt_auth import create_access_token, create_refresh_token
+from server.api.jwt_auth import create_access_token, create_refresh_token, get_current_user, decode_token
 from server.database.models.user_model import User
 from server.database.session import get_db
 from server.features import hashed_password
+from server.redis_settings import redis_client
 
 u_router = APIRouter() #u_router как user_router
 
@@ -54,3 +55,31 @@ async def login(data: UserLogin, db: Session = Depends(get_db)) -> dict:
     access_token = create_access_token(user.id)
     refresh_token = create_refresh_token(user.id)
     return {"success": True, "payload": {"access_token": access_token, "refresh_token": refresh_token}}
+
+@u_router.post('/logout')
+async def logout(refresh_token: str, user: User = Depends(get_current_user)) -> dict:
+    token_info = decode_token(refresh_token)
+    jti_id = token_info.get('jti')
+    if redis_client.exists(f"refresh:{jti_id}"):
+        redis_client.delete(f"refresh:{jti_id}")
+    return {"success": True, "message": "Вы успешно вышли из системы!"}
+
+@u_router.post('/refresh')
+async def get_new_access_token(refresh_token: str) -> dict:
+    token_info = decode_token(refresh_token)
+
+    if token_info.get("type") != "refresh_token":
+        raise HTTPException(status_code=401, detail="Неверный тип токена")
+
+    jti = token_info.get("jti")
+    if not redis_client.exists(f"refresh:{jti}"):
+        raise HTTPException(status_code=401, detail="Refresh токен недействителен")
+
+    user_id = token_info.get("sub")
+
+    new_access_token = create_access_token(user_id)
+    return {"success": True, "access_token": new_access_token}
+
+
+
+
